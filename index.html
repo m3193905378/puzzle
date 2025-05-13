@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>16块拼图游戏</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            gap: 40px;
+            padding: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+                gap: 20px;
+                padding: 10px;
+            }
+            .panel {
+                width: 100%;
+            }
+            #puzzle-container, #original-image {
+                max-width: 100%;
+                width: 100%;
+                height: auto;
+            }
+            #puzzle-container {
+                height: 150px;
+            }
+            button {
+                padding: 15px 30px;
+                font-size: 1.2em;
+            }
+            h1 {
+                font-size: 1.5em;
+            }
+            h3 {
+                font-size: 1.2em;
+            }
+        }
+        .panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 100%;
+        }
+        #original-image {
+            max-width: 400px;
+            height: auto;
+            border: 2px solid #333;
+            margin: 10px;
+            display: block;
+        }
+#puzzle-container {
+    width: 260px;
+    height: 260px;
+    border: 2px solid #333;
+    position: relative;
+    margin-top: 20px;
+    overflow: visible;
+    background: none;
+    box-sizing: border-box;
+}
+        .puzzle-piece {
+            position: absolute;
+            cursor: move;
+            user-select: none;
+            transition: all 0.3s ease;
+            touch-action: none;
+            width: 40%;  /* 增加尺寸到34% */
+            height: 40%;
+            transform: translate(-3%, -3%); /* 进一步加大偏移量 */
+            box-sizing: border-box;
+            border: 1px solid rgba(0,0,0,0.1); /* 添加半透明边框 */
+            z-index: 1;
+        }
+        .puzzle-piece:hover {
+            z-index: 2; /* 悬停时提升层级 */
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <h1>来还原大宋的生活场景吧！</h1>
+        <button id="start-game">开始游戏</button>
+        <div id="puzzle-container"></div>
+    </div>
+    
+    <div id="completion-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; flex-direction: column; color: white;">
+        <h2 style="font-size: 3em; margin-bottom: 20px;">拼图完成！</h2>
+        <button onclick="startGame(true); document.getElementById('completion-overlay').style.display = 'none'; document.getElementById('puzzle-container').style.background = ''" 
+                style="padding: 15px 30px; font-size: 1.2em; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer;">
+            再玩一次
+        </button>
+    </div>
+    <div class="panel">
+        <h3>参考图</h3>
+
+        <img id="original-image" src="a.png" alt="拼图原图">
+    </div>
+    
+    <script>
+        document.getElementById('start-game').addEventListener('click', () => startGame());
+        
+        const PIECES = 16;
+        let isFirstGame = true;
+        let pieces = [];
+        let correctPositions = [];
+        
+        function startGame(resetPositions = false) {
+            const container = document.getElementById('puzzle-container');
+            const img = document.getElementById('original-image');
+            
+            if(isFirstGame) {
+                resetPositions = false;
+                isFirstGame = false;
+            }
+            
+            if(resetPositions) {
+                container.innerHTML = '';
+                pieces = [];
+                correctPositions = [];
+                return;
+            }
+            
+            container.innerHTML = '';
+            pieces = [];
+            correctPositions = [];
+            
+            img.onload = null;  
+            const gameImage = new Image();
+            if(window.puzzleLoading) return;
+            window.puzzleLoading = true;
+            
+            gameImage.src = img.src;
+            
+            gameImage.onload = function() {
+                window.puzzleLoading = false;
+                const containerWidth = container.offsetWidth;
+                const containerHeight = container.offsetHeight;
+                const pieceWidth = containerWidth / 4;
+                const pieceHeight = containerHeight / 4;
+                
+                container.querySelectorAll('.puzzle-piece').forEach(piece => piece.remove());
+                pieces = [];
+                correctPositions = [];
+                
+                for (let row = 0; row < 4; row++) {
+                    for (let col = 0; col < 4; col++) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = pieceWidth;
+                        canvas.height = pieceHeight;
+                        canvas.className = 'puzzle-piece';
+                        
+                        const pieceIndex = row * 4 + col;
+                        canvas.style.backgroundImage = `url(${pieceIndex}.png)`;
+                        canvas.style.backgroundSize = `cover`;
+                        canvas.style.backgroundRepeat = 'no-repeat';
+                        canvas.style.display = 'block';
+                        
+                        // 调整正确位置计算，允许10%重叠
+                        const correctX = col * (pieceWidth * 0.9); 
+                        const correctY = row * (pieceHeight * 0.9);
+                        correctPositions.push({x: correctX, y: correctY});
+                        
+                        canvas.style.left = `${Math.random() * (container.offsetWidth + 200) - 100}px`;
+                        canvas.style.top = `${Math.random() * (container.offsetHeight + 200) - 100}px`;
+                        
+                        makeDraggable(canvas);
+                        container.appendChild(canvas);
+                        pieces.push({element: canvas, correctX, correctY});
+                    }
+                }
+            };
+        }
+
+        function makeDraggable(element) {
+            let isDragging = false;
+            let currentX = 0;
+            let currentY = 0;
+            let initialX = 0;
+            let initialY = 0;
+
+            element.addEventListener('mousedown', dragStart);
+            element.addEventListener('touchstart', dragStart);
+
+            function dragStart(e) {
+                e.preventDefault();
+                isDragging = true;
+                initialX = e.clientX || e.touches[0].clientX;
+                initialY = e.clientY || e.touches[0].clientY;
+                
+                document.addEventListener('mousemove', drag);
+                document.addEventListener('touchmove', drag);
+                document.addEventListener('mouseup', dragEnd);
+                document.addEventListener('touchend', dragEnd);
+            }
+
+            function drag(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                
+                currentX = (e.clientX || e.touches[0].clientX) - initialX;
+                currentY = (e.clientY || e.touches[0].clientY) - initialY;
+                
+                initialX = e.clientX || e.touches[0].clientX;
+                initialY = e.clientY || e.touches[0].clientY;
+                
+                element.style.left = `${parseInt(element.style.left) + currentX}px`;
+                element.style.top = `${parseInt(element.style.top) + currentY}px`;
+                
+                checkCompletion();
+            }
+
+            function dragEnd() {
+                isDragging = false;
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('touchmove', drag);
+            }
+        }
+
+        function checkCompletion() {
+            const threshold = 10; // 降低吸附阈值至10像素
+            let correctCount = 0;
+            
+            requestAnimationFrame(() => {
+                pieces.forEach(piece => {
+                    const rect = piece.element.getBoundingClientRect();
+                    const containerRect = document.getElementById('puzzle-container').getBoundingClientRect();
+                    
+                    const actualX = rect.left - containerRect.left;
+                    const actualY = rect.top - containerRect.top;
+                    
+                    // 自动吸附逻辑
+                    if (Math.abs(actualX - piece.correctX) <= threshold * 1.5 || 
+                        Math.abs(actualY - piece.correctY) <= threshold * 1.5) {
+                        
+                        // 高亮潜在吸附位置
+                        piece.element.style.boxShadow = '0 0 15px rgba(76,175,80,0.5)';
+                        
+                        // 当接近正确位置时自动吸附
+                        if (Math.abs(actualX - piece.correctX) <= threshold && 
+                            Math.abs(actualY - piece.correctY) <= threshold) {
+                            
+                            piece.element.style.transition = 'all 0.3s ease';
+                            piece.element.style.left = `${piece.correctX}px`;
+                            piece.element.style.top = `${piece.correctY}px`;
+                            piece.element.style.boxShadow = 'none';
+                            correctCount++;
+                        }
+                    } else {
+                        piece.element.style.boxShadow = 'none';
+                        piece.element.style.transition = 'none';
+                    }
+                });
+                
+                if (correctCount === PIECES) {
+                    Promise.resolve().then(() => {
+                        const overlay = document.getElementById('completion-overlay');
+                        overlay.style.display = 'flex';
+                        const container = document.getElementById('puzzle-container');
+                        container.style.background = 'none';
+                    });
+                }
+            });
+        }
+    </script>
+</body>
+</html>
